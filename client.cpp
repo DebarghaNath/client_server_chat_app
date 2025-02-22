@@ -5,10 +5,12 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <limits>  
 using namespace std;
 
 int N = 265;
 int sock_fd;
+
 
 int exit_ = 0;
 int print_ = 0;
@@ -17,6 +19,7 @@ void * Read(void * arg)
     char buffer[N];
     while(true)
     {
+
         if(exit_)
         {
             if(!print_)
@@ -34,7 +37,7 @@ void * Read(void * arg)
             exit(EXIT_FAILURE);
         }
         cout<<endl; cout<<endl;
-        cout<<buffer;fflush(stdout);
+        cout<<buffer<<endl;
     }
 }
 void * Write(void * arg)
@@ -42,30 +45,38 @@ void * Write(void * arg)
     while(true)
     {
         fflush(stdout);
-        cout << "Enter your message: ";
+        cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
+        cout << "Enter your message: ";
         string message;
         getline(cin, message);
-        cout<<endl; 
+        cout << endl; 
+
+        if(message.empty())
+        {
+            continue; 
+        }
+
         ssize_t n = write(sock_fd, message.c_str(), message.size()); 
         if (n <= 0)
         {
             perror("writing failed");
             exit(EXIT_FAILURE);
         }
-        exit_ = (message=="exit");
+
+        exit_ = (message == "exit");
         if(exit_)
         {
             if(!print_)
             {
                 print_ = 1;
-                cout<<"You have successfully Exited Group Chat"<<endl;
+                cout << "You have successfully Exited Group Chat" << endl;
             }
             exit(0);
         }
-        
     }
 }
+
 
 int main(int argc, char* argv[])
 {

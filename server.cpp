@@ -36,7 +36,7 @@ void *Client(void *arg) {
     }
     string name(buffer);
     name.erase(name.find_last_not_of("\r\n") + 1);
-
+    string nm = name;
     pthread_mutex_lock(&map_mutex);
     nameToSockfd[name] = clientsock_fd;
     pthread_mutex_unlock(&map_mutex);
@@ -44,9 +44,13 @@ void *Client(void *arg) {
     string joinMsg = "\n" + name + " joined the chat.\n";
     cout << joinMsg << endl;cout<<endl;
     pthread_mutex_lock(&map_mutex);
-    for (auto &p : nameToSockfd) {
-        write(p.second, joinMsg.c_str(), joinMsg.size());
+    for (auto &p : nameToSockfd) 
+    {
+        if(p.second!=clientsock_fd)
+            write(p.second, joinMsg.c_str(), joinMsg.size());
     }
+    string clientmsg = "successfully joined the chat \n";
+    write(clientsock_fd,clientmsg.c_str(),clientmsg.size());
     pthread_mutex_unlock(&map_mutex);
     while (true) {
         bzero(temp_buffer, N);
@@ -60,9 +64,15 @@ void *Client(void *arg) {
         }
         
         string msg(temp_buffer);
+        cout<<nm<<": "<<msg<<endl;
         pthread_mutex_lock(&map_mutex);
+        msg = nm+": "+msg;
+        for(int i=0;i<msg.size();i++)
+        {
+            temp_buffer[i] = msg[i];
+        }
         for (auto &p : nameToSockfd) {
-            write(p.second, temp_buffer, bytes_read);
+            write(p.second, temp_buffer, msg.size()+1);
         }
         pthread_mutex_unlock(&map_mutex);
 
@@ -70,8 +80,7 @@ void *Client(void *arg) {
             break;
         }
     }
-    
-    // Remove the client from the global map
+   
     pthread_mutex_lock(&map_mutex);
     for (auto it = nameToSockfd.begin(); it != nameToSockfd.end(); ) {
         if (it->second == clientsock_fd) {
