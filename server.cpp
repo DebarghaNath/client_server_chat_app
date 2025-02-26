@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <stdlib.h>
 using namespace std;
 
 set<string> S;
@@ -12,17 +13,14 @@ map<string, int> nameToSockfd;
 int N = 256;
 pthread_mutex_t map_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-class data {
-private:
+typedef struct
+{
     int sock_fd;
-public:
-    data(int fd) : sock_fd(fd) {}
-    int getSockFd() { return sock_fd; }
-};
+}Data;
 
 void *Client(void *arg) {
-    data *d = (data*)arg;  
-    int clientsock_fd = d->getSockFd();
+    Data *d = (Data*)arg;  
+    int clientsock_fd = d->sock_fd;
     delete d; 
 
     char temp_buffer[N];
@@ -152,7 +150,8 @@ int main(int argc, char* argv[]) {
         cout << "ip address: " << client_ip << endl;
 
         pthread_t thread_id;
-        data *d = new data(clientsock_fd);
+        Data *d = new Data();
+        d->sock_fd = clientsock_fd;
         if (pthread_create(&thread_id, NULL, Client, (void*)d) != 0) {
             perror("pthread_create failed");
             delete d;
