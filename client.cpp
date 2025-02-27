@@ -8,7 +8,7 @@
 #include <limits>  
 using namespace std;
 
-int N = 265;
+int N = 10000;
 int sock_fd;
 
 
@@ -46,7 +46,6 @@ void * Write(void * arg)
     {
         fflush(stdout);
         cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
         cout << "Enter your message: ";
         string message;
         getline(cin, message);
@@ -83,7 +82,7 @@ int main(int argc, char* argv[])
     int port_no;
     char* ip_address;
     struct sockaddr_in server_addr;
-
+    int signup;
     if (argc < 3)
     {
         perror("enter correct inputs");
@@ -114,9 +113,41 @@ int main(int argc, char* argv[])
         perror("connection error");
         exit(EXIT_FAILURE);
     }
-    cout << "Enter your name: ";
+
+    cout << "+----------------------------------------------------------------------------------+" << endl;
+    cout << "|                                                                                  |" << endl;
+    cout << "| SignIn or SignUp                                                                 |" << endl;                     
+    cout << "| for SignIn enter 1 and for SignUp enter 0                                        |" << endl;                                                                                                                                               
+    cout << "+----------------------------------------------------------------------------------+" << endl;
+    cout<<"Enter Choice: "<<endl;
+
+    cin>>signup;
     string message;
-    getline(cin, message); 
+    if(signup == 0)
+    {
+        string temp;
+        message = "signup";
+        cout<<"enter name: "<<endl;
+        cin>>temp;
+        message=message+"#"+temp;
+        cout<<"enter password: "<<endl;
+        cin>>temp;
+        message=message+"#"+temp;
+        //cout<<message<<endl;
+    }
+    else
+    {
+        string temp;
+        message = "signin";
+        cout<<"enter name: "<<endl;
+        cin>>temp;
+        message=message+"#"+temp;
+        cout<<"enter password: "<<endl;
+        cin>>temp;
+        message=message+"#"+temp;
+       // cout<<message<<endl;
+    }
+    
     ssize_t n = write(sock_fd, message.c_str(), message.size()); 
     if (n <= 0)
     {

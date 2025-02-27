@@ -6,11 +6,20 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <stdlib.h>
-using namespace std;
+#include <mysql_driver.h>
+#include <mysql_connection.h>
+#include <cppconn/resultset.h>
+#include <cppconn/statement.h>
 
+using namespace std;
+using namespace sql;
+
+
+mysql::MySQL_Driver * driver;
+Connection *con = nullptr;
 set<string> S;
 map<string, int> nameToSockfd;
-int N = 256;
+int N = 10000;
 pthread_mutex_t map_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct
@@ -18,7 +27,11 @@ typedef struct
     int sock_fd;
 }Data;
 
-void *Client(void *arg) {
+void *Client(void *arg) 
+{
+    int correct  = 0;
+   
+
     Data *d = (Data*)arg;  
     int clientsock_fd = d->sock_fd;
     delete d; 
@@ -32,69 +45,149 @@ void *Client(void *arg) {
         close(clientsock_fd);
         pthread_exit(NULL);
     }
-    string name(buffer);
-    name.erase(name.find_last_not_of("\r\n") + 1);
-    string nm = name;
-    pthread_mutex_lock(&map_mutex);
-    nameToSockfd[name] = clientsock_fd;
-    pthread_mutex_unlock(&map_mutex);
-
-    string joinMsg = "\n" + name + " joined the chat.\n";
-    cout << joinMsg << endl;cout<<endl;
-    pthread_mutex_lock(&map_mutex);
-    for (auto &p : nameToSockfd) 
+    string type,name,password;
+    stringstream ss(buffer);
+    getline(ss, type, '#');
+    getline(ss, name, '#'); 
+    getline(ss, password);
+    //cout<<type<<endl;
+    if(type=="signup")
     {
-        if(p.second!=clientsock_fd)
-            write(p.second, joinMsg.c_str(), joinMsg.size());
-    }
-    string clientmsg = "successfully joined the chat \n";
-    write(clientsock_fd,clientmsg.c_str(),clientmsg.size());
-    pthread_mutex_unlock(&map_mutex);
-    while (true) {
-        bzero(temp_buffer, N);
-        ssize_t bytes_read = read(clientsock_fd, temp_buffer, N - 1);
-        if (bytes_read < 0) {
-            perror("Read failed");
-            break;
-        }
-        if (bytes_read == 0) {
-            break;
-        }
-        
-        string msg(temp_buffer);
-        cout<<nm<<": "<<msg<<endl;
-        pthread_mutex_lock(&map_mutex);
-        msg = nm+": "+msg;
-        for(int i=0;i<msg.size();i++)
+        try 
         {
-            temp_buffer[i] = msg[i];
+            con->setSchema("chatapp");
+            Statement *stmt = con->createStatement();
+            if (type == "signup") 
+            {
+                string query = "INSERT INTO users (name, password) VALUES ('" + name + "', '" + password + "');";
+                stmt->execute(query);
+                cout << "User added successfully!" << endl;
+                correct  = 1;
+                delete stmt;
+            }
         }
-        for (auto &p : nameToSockfd) {
-            write(p.second, temp_buffer, msg.size()+1);
+        catch (SQLException &e) 
+        {
+            cerr << "SQL Error: " << e.what() << std::endl;
+            close(clientsock_fd);
+            pthread_exit(NULL);
         }
+    }
+    if(type=="signin")
+    {
+       
+        try 
+        {
+            con->setSchema("chatapp");
+            Statement *stmt = con->createStatement();
+            string query_check = "SELECT * FROM users WHERE name = '" + name + "' and password = '" +password + "';";
+            ResultSet *res = stmt->executeQuery(query_check);
+            if (res->next()) 
+            {
+                cout<<"User exists!"<<endl;
+                correct = 1;
+            } 
+            else 
+            {
+                cout<<"Not a valid user"<<endl;
+            }
+
+            delete res;
+        }
+        catch (SQLException &e) 
+        {
+            cerr << "SQL Error: " << e.what() << std::endl;
+            close(clientsock_fd);
+            pthread_exit(NULL);
+        }
+    }
+    
+    if(correct==1)
+    {
+        name.erase(name.find_last_not_of("\r\n") + 1);
+        string nm = name;
+        pthread_mutex_lock(&map_mutex);
+        nameToSockfd[name] = clientsock_fd;
         pthread_mutex_unlock(&map_mutex);
 
-        if (msg == "bye") {
-            break;
+        string joinMsg = "\n" + name + " joined the chat.\n";
+        cout << joinMsg << endl;cout<<endl;
+        pthread_mutex_lock(&map_mutex);
+        for (auto &p : nameToSockfd) 
+        {
+            if(p.second!=clientsock_fd)
+                write(p.second, joinMsg.c_str(), joinMsg.size());
         }
-    }
-   
-    pthread_mutex_lock(&map_mutex);
-    for (auto it = nameToSockfd.begin(); it != nameToSockfd.end(); ) {
-        if (it->second == clientsock_fd) {
-            it = nameToSockfd.erase(it);
-        } else {
-            ++it;
+        string clientmsg = "successfully joined the chat \n";
+        write(clientsock_fd,clientmsg.c_str(),clientmsg.size());
+        pthread_mutex_unlock(&map_mutex);
+        while (true) {
+            bzero(temp_buffer, N);
+            ssize_t bytes_read = read(clientsock_fd, temp_buffer, N - 1);
+            if (bytes_read < 0) {
+                perror("Read failed");
+                break;
+            }
+            if (bytes_read == 0) {
+                break;
+            }
+            
+            string msg(temp_buffer);
+            cout<<nm<<": "<<msg<<endl;
+            pthread_mutex_lock(&map_mutex);
+            msg = nm+": "+msg;
+            for(int i=0;i<msg.size();i++)
+            {
+                temp_buffer[i] = msg[i];
+            }
+            for (auto &p : nameToSockfd) {
+                write(p.second, temp_buffer, msg.size()+1);
+            }
+            pthread_mutex_unlock(&map_mutex);
+
+            if (msg == "bye") {
+                break;
+            }
         }
-    }
-    pthread_mutex_unlock(&map_mutex);
     
-    shutdown(clientsock_fd, SHUT_RDWR);
-    close(clientsock_fd);
-    pthread_exit(NULL);
+        pthread_mutex_lock(&map_mutex);
+        for (auto it = nameToSockfd.begin(); it != nameToSockfd.end(); ) {
+            if (it->second == clientsock_fd) {
+                it = nameToSockfd.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        pthread_mutex_unlock(&map_mutex);
+        delete con;
+        shutdown(clientsock_fd, SHUT_RDWR);
+        close(clientsock_fd);
+        pthread_exit(NULL);
+    }
+    else
+    {
+        delete con;
+        string clientmsg = "Wrong input for sql";
+        write(clientsock_fd,clientmsg.c_str(),clientmsg.size());
+        shutdown(clientsock_fd, SHUT_RDWR);
+        close(clientsock_fd);
+        pthread_exit(NULL);
+    }
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) 
+{
+    try 
+    {
+        driver = mysql::get_mysql_driver_instance();
+        con = driver->connect("tcp://127.0.0.1:3306", "root", "Parak@2004");
+        con->setSchema("chatapp");
+    } 
+    catch (SQLException &e) 
+    {
+        cerr << "MySQL Connection Error: " << e.what() << endl;
+    }
+
     int port_no, sock_fd;
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_len;
